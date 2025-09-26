@@ -1,0 +1,11 @@
+numpy==1.26.*
+scipy==1.13.*
+pandas==2.2.*
+matplotlib==3.9.*
+pyfftw
+numba
+PyYAML
+emcee
+arviz
+corner
+treecorr
