@@ -1,0 +1,17 @@
+name: pfgm-dm
+channels: [conda-forge]
+dependencies:
+  - python=3.11
+  - numpy=1.26
+  - scipy=1.13
+  - pandas=2.2
+  - matplotlib=3.9
+  - pyfftw
+  - numba
+  - pyyaml
+  - emcee
+  - arviz
+  - pip
+  - pip:
+      - corner
+      - treecorr
