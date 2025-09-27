@@ -6,6 +6,27 @@ import matplotlib.pyplot as plt
 
 from src.pfgm.kernels import mu_lens, hankel_j2
 
+def aic_bic(k_params, chi2_val, n_points):
+    """Compute AIC and BIC from chi2, number of params, and data points."""
+    aic = chi2_val + 2*k_params
+    bic = chi2_val + k_params*np.log(max(n_points,1))
+    return float(aic), float(bic)
+
+def choose_paths(man, bin_tag):
+    """Pick KiDS and 1-halo paths for Bin A or B."""
+    bin_tag = bin_tag.upper()
+    if bin_tag == "A":
+        kids = man["paths"]["kids_binA_clean"]
+        oneh = man["paths"]["routeA_1h_binA"]
+    elif bin_tag == "B":
+        kids = man["paths"]["kids_binB_clean"]
+        oneh = man["paths"]["routeA_1h_binB"]
+    else:
+        raise ValueError("Unknown bin; use A or B")
+    cov = man["paths"].get(f"kids_bin{bin_tag}_cov")
+    return kids, oneh, cov
+
+
 def load_manifest(path):
     with open(path, "r") as f:
         return yaml.safe_load(f)
@@ -80,36 +101,6 @@ def model_2h(R, k, Pnl, b0, b2, lam):
     return ds2h
 
 def chi2(model, data, cov=None, sigma=None):
-def aic_bic(k_params, chi2_val, n_points):
-    # Gaussian likelihood → AIC/BIC on χ²
-    aic = chi2_val + 2*k_params
-    bic = chi2_val + k_params*np.log(max(n_points,1))
-    return float(aic), float(bic)
-
-def choose_paths(man, bin_tag):
-    bin_tag = bin_tag.upper()
-    if bin_tag == "A":
-        kids = man["paths"]["kids_binA_clean"]
-        oneh = man["paths"]["routeA_1h_binA"]
-    elif bin_tag == "B":
-        kids = man["paths"]["kids_binB_clean"]
-        oneh = man["paths"]["routeA_1h_binB"]
-    else:
-        raise ValueError("Unknown bin; use A or B")
-    cov = man["paths"].get(f"kids_bin{bin_tag}_cov")
-    return kids, oneh, cov
-
-    r = model - data
-    if cov is not None:
-        try:
-            inv = np.linalg.inv(cov)
-            return float(r @ inv @ r)
-        except Exception:
-            pass
-    if sigma is None:
-        raise ValueError("Need sigma (diag) if covariance is not provided.")
-    return float(np.sum((r/sigma)**2))
-
 def fit_bin(man, out_tag="binA", bin_sel="A", do_gr_control=True):
     kids_path, oneh_path, cov_path = choose_paths(man, bin_sel)
     R, DS, S, C = load_kids_clean(kids_path, cov_path)
