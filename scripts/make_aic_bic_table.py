@@ -19,6 +19,18 @@ for f in sorted(glob.glob("results/tables/bin_*_fit_*.json")):
 # group by bin; modes we care about in order:
 order = ["GRkernel","freeA","A1"]
 
+
+def fmt_lambda(x, lb=0.05, ub=5.0):
+    if x is None: return "--"
+    try:
+        x = float(x)
+        # mark near bounds (within 2% of range)
+        if abs(x-ub) < 0.02*(ub-lb): return r"$>\!\mathrm{few\ Mpc}$"
+        if abs(x-lb) < 0.02*(ub-lb): return f"$\approx$ {lb:.2g}"
+        return f"{x:.3g}"
+    except Exception:
+        return str(x)
+
 def ffmt(x, digs=3):
     if x is None: return "--"
     try:
@@ -42,7 +54,7 @@ for b in sorted(bybin):
     for m in order:
         if m not in grp: continue
         r = grp[m]
-        lam = ffmt(r["lam"])
+        lam = fmt_lambda(r["lam"])
         chn = ffmt(r["chi2nu"])
         aic = ffmt(r["AIC"])
         bic = ffmt(r["BIC"])
