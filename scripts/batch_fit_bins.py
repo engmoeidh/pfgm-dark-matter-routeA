@@ -38,29 +38,76 @@ def load_kids_clean(csv_path, cov_path=None):
             C = None
     return R, DS, S, C
 
+
 def load_routeA_1h(csv_path, R_target):
-    """Load 1-halo (baryons-only) profile and interpolate to the requested R."""
-    # Try header=None (two columns), else header=0 with named columns.
+    """Load Route-A 1-halo profile robustly and interpolate onto R_target.
+       Accepts 2-col no-header (R, ΔΣ_1h), named columns, different delimiters.
+       If only 'total' and '2h' exist, computes 1h = total - 2h."""
+    import pandas as pd, numpy as np
+    candidates_1h = [
+        "deltasigma_1h","ds_1h","one_halo","1h","baryons_only","deltasigma1h","ds1h"
+    ]
+    candidates_R = ["r","radius_mpc","r_mpc"]
+    def try_read(hdr):
+        # sep=None lets pandas sniff delimiter (commas/semicolons/tabs)
+        return pd.read_csv(csv_path, header=hdr, sep=None, engine="python")
     for hdr in [None, 0]:
         try:
-            df = pd.read_csv(csv_path, header=hdr)
-            if df.shape[1] == 2:
-                Rtab = df.iloc[:,0].astype(float).values
-                oneh = df.iloc[:,1].astype(float).values
+            df = try_read(hdr)
+        except Exception:
+            continue
+        # numeric only copy helps identify 2-col files
+        numcols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+        # 2-col numeric → assume R, 1h
+        if len(df.columns)==2 or len(numcols)==2:
+            c0, c1 = (numcols if len(numcols)==2 else list(df.columns)[:2])
+            Rtab = df[c0].astype(float).values
+            oneh = df[c1].astype(float).values
+            break
+        cols = {c.lower().strip(): c for c in df.columns}
+        # find R
+        Rcol = None
+        for k in candidates_R:
+            if k in cols:
+                Rcol = cols[k]; break
+        if Rcol is None:
+            # fallback: first column if numeric-looking
+            Rcol = list(df.columns)[0]
+        # find 1h
+        Dcol = None
+        for k in candidates_1h:
+            if k in cols:
+                Dcol = cols[k]; break
+        if Dcol is None:
+            # try to reconstruct from total and 2h
+            tot = cols.get("total") or cols.get("deltasigma_total") or cols.get("ds_total")
+            two = cols.get("2h") or cols.get("ds_2h") or cols.get("deltasigma_2h")
+            if tot and two:
+                oneh_series = df[tot].astype(float) - df[two].astype(float)
+                Rtab = df[Rcol].astype(float).values
+                oneh = oneh_series.values
                 break
-            # named columns fall-back
-            cols = {c.lower().strip(): c for c in df.columns}
-            Rcol = cols.get("r") or list(df.columns)[0]
-            Dcol = cols.get("deltasigma_1h") or cols.get("ds_1h") or cols.get("deltasigma") or list(df.columns)[1]
+            else:
+                # try last numeric column as 1h
+                cand = None
+                for c in df.columns[::-1]:
+                    if pd.api.types.is_numeric_dtype(df[c]):
+                        cand = c; break
+                if cand is not None:
+                    Rtab = df[Rcol].astype(float).values
+                    oneh = df[cand].astype(float).values
+                    break
+        else:
             Rtab = df[Rcol].astype(float).values
             oneh = df[Dcol].astype(float).values
             break
-        except Exception:
-            continue
     else:
         raise ValueError(f"Cannot parse 1-halo CSV: {csv_path}")
+    # Interpolate
+    from scipy import interpolate
     f = interpolate.InterpolatedUnivariateSpline(Rtab, oneh, k=1, ext=1)
     return f(R_target)
+
 
 def build_pnl(k_file, kmin, kmax, nk):
     df = pd.read_csv(k_file)
