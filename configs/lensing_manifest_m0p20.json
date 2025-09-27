@@ -1,0 +1,17 @@
+{
+  "thetaE_results_csv": "thetaE_results_m0p20.csv",
+  "parity_figure": "thetaE_parity_m0p20.png",
+  "gamma_t_stacks": {
+    "lowV_csv": "gamma_t_stack_lowV_m0p20.csv",
+    "highV_csv": "gamma_t_stack_highV_m0p20.csv",
+    "lowV_png": "gamma_t_stack_lowV_m0p20.png",
+    "highV_png": "gamma_t_stack_highV_m0p20.png"
+  },
+  "per_lens_gt_profiles": [
+    "gt_profile_UGC06923_m0p20.csv",
+    "gt_profile_UGC06983_m0p20.csv",
+    "gt_profile_UGC11557_m0p20.csv",
+    "gt_profile_UGC05986_m0p20.csv"
+  ],
+  "note": "Uses spherical-proxy deflection and mock D_S=1500 Mpc. Replace distances and/or switch to Route-A geodesic integral for manuscript plots."
+}

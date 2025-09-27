@@ -1,0 +1,37 @@
+constructed_csvs_dir: /mnt/data/PFGM_SPARK_RouteA/SPARC_run_guarded
+data_source: Rotmod_LTG.zip (SPARC per-galaxy rotmod files)
+guards:
+  alphaX_max: <= 1e-2
+  max_abs_Psi: <= 1e-3
+  z_max: <= 1e-6
+numerics:
+  R_cut_kpc: 0.5
+  c2_multiplier_only_in_Vpfgm2: true
+  derivative: PCHIP on dimensionless Psi(R)
+  flux_form: true
+  taper_width_kpc: 1.0
+outputs:
+  BTFR_png: /mnt/data/PFGM_SPARK_RouteA/SPARC_run_guarded/guarded_subset_scaled/BTFR.png
+  RAR_png: /mnt/data/PFGM_SPARK_RouteA/SPARC_run_guarded/guarded_subset_scaled/RAR.png
+  summary_csv: /mnt/data/PFGM_SPARK_RouteA/SPARC_run_guarded/guarded_subset_scaled/summary.csv
+routeA_parameters:
+  alpha: 0.001
+  beta: 1.0
+  eps_phi: 0.002
+  m: 0.5
+  sigma: 1.0
+subset_used:
+- DDO161.csv
+- ESO563-G021.csv
+- F583-1.csv
+- IC2574.csv
+- IC4202.csv
+- NGC0024.csv
+- NGC0055.csv
+- NGC0100.csv
+- NGC0247.csv
+- NGC0289.csv
+- NGC0300.csv
+- NGC1003.csv
+units_normalization:
+  rho_scale_Msun_per_kpc3: 100000000.0
