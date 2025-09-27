@@ -212,6 +212,7 @@ def aic_bic(k_params, chi2_val, n_points):
     bic = chi2_val + k_params*np.log(max(n_points,1))
     return float(aic), float(bic)
 
+
 def choose_paths(man, bin_tag):
     bin_tag = bin_tag.upper()
     if bin_tag == "A":
@@ -220,12 +221,14 @@ def choose_paths(man, bin_tag):
     elif bin_tag == "B":
         kids = man["paths"]["kids_binB_clean"]
         oneh = man["paths"]["routeA_1h_binB"]
+    elif bin_tag == "C":
+        kids = man["paths"]["kids_binC_clean"]
+        oneh = man["paths"]["routeA_1h_binC"]
     else:
-        raise ValueError("Unknown bin; use A or B")
+        raise ValueError("Unknown bin; use A, B or C")
     cov = man["paths"].get(f"kids_bin{bin_tag}_cov")
     return kids, oneh, cov
 
-# ----------------------------- fitting -----------------------------
 
 def fit_bin(man, out_tag="bin", bin_sel="A", do_gr_control=True):
     # Load inputs
