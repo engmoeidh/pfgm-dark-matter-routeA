@@ -8,7 +8,7 @@ paths:
   routeA_1h_binA: data/processed/routeA/routeA_m0p18_binA.csv
   p_nl: data/raw/hmcode/Pnl_z0p286_HMcode.csv
   kids_binB_clean: data/processed/lensing/DeltaSigma_binB_clean.csv
-  routeA_1h_binB: data/processed/routeA/routeA_m0p18_binB.csv
+  routeA_1h_binB: data/processed/routeA/realRouteA_m018_binB_total.csv
 fitting:
   k_min: 0.0001
   k_max: 30.0
