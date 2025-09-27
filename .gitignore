@@ -5,3 +5,4 @@ __pycache__/
 .env/
 data/tmp/
 results/posteriors/*.h5
+results/tables/build_info.json
