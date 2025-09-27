@@ -1,0 +1,19 @@
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{l l r r r r r}
+\toprule
+Bin & Mode & $\lambda$ [Mpc] & $\chi^2/\nu$ & AIC & BIC & $\Delta$AIC (vs GR) \\
+\midrule
+A & GRkernel & 0 & 18.3 & 226 & 228 & -- \\
+A & freeA & 0.178 & 19.9 & 227 & 230 & 1.93 \\
+A & A1 & 0.05 & 26.3 & 322 & 324 & 96.2 \\
+\midrule
+B & GRkernel & 0 & 8.48 & 108 & 110 & -- \\
+B & freeA & 0.123 & 4.42 & 56.6 & 59.5 & -51.2 \\
+B & A1 & 0.05 & 3.64e+11 & 4.37e+12 & 4.37e+12 & 4.37e+12 \\
+\midrule
+\bottomrule
+\caption{Model comparison for KiDS bins A and B. Modes: GRkernel ($\lambda=0$), freeA, and A1-locked ($A_{\rm 1h}=1$). $\Delta$AIC is relative to GR per bin.}
+\label{tab:aic_bic_bins}
+\end{table}
