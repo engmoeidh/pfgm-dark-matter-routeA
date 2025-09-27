@@ -80,6 +80,25 @@ def model_2h(R, k, Pnl, b0, b2, lam):
     return ds2h
 
 def chi2(model, data, cov=None, sigma=None):
+def aic_bic(k_params, chi2_val, n_points):
+    # Gaussian likelihood → AIC/BIC on χ²
+    aic = chi2_val + 2*k_params
+    bic = chi2_val + k_params*np.log(max(n_points,1))
+    return float(aic), float(bic)
+
+def choose_paths(man, bin_tag):
+    bin_tag = bin_tag.upper()
+    if bin_tag == "A":
+        kids = man["paths"]["kids_binA_clean"]
+        oneh = man["paths"]["routeA_1h_binA"]
+    elif bin_tag == "B":
+        kids = man["paths"]["kids_binB_clean"]
+        oneh = man["paths"]["routeA_1h_binB"]
+    else:
+        raise ValueError("Unknown bin; use A or B")
+    cov = man["paths"].get(f"kids_bin{bin_tag}_cov")
+    return kids, oneh, cov
+
     r = model - data
     if cov is not None:
         try:
@@ -91,9 +110,10 @@ def chi2(model, data, cov=None, sigma=None):
         raise ValueError("Need sigma (diag) if covariance is not provided.")
     return float(np.sum((r/sigma)**2))
 
-def fit_binA(man, out_tag="binA"):
-    R, DS, S, C = load_kids_clean(man["paths"]["kids_binA_clean"], man["paths"].get("kids_binA_cov"))
-    oneh = load_routeA_1h(man["paths"]["routeA_1h_binA"], R)
+def fit_bin(man, out_tag="binA", bin_sel="A", do_gr_control=True):
+    kids_path, oneh_path, cov_path = choose_paths(man, bin_sel)
+    R, DS, S, C = load_kids_clean(kids_path, cov_path)
+    oneh = load_routeA_1h(oneh_path, R)
     k, Pnl = build_pnl(man["paths"]["p_nl"], man["fitting"]["k_min"], man["fitting"]["k_max"], man["fitting"]["n_k"])
 
     # free-A fit
@@ -128,7 +148,7 @@ def fit_binA(man, out_tag="binA"):
     chi2_f = chi2(mod_f, DS, cov=C, sigma=S)
     nu_f   = len(R) - len(res.x)
     out_free = {
-        "bin": "A",
+        "bin": bin_sel,
         "mode": "freeA",
         "A1h": float(A1h_f), "b0": float(b0_f), "b2": float(b2_f), "lam": float(lam_f),
         "chi2": float(chi2_f), "nu": int(nu_f), "chi2/nu": float(chi2_f/max(nu_f,1))
@@ -157,8 +177,48 @@ def fit_binA(man, out_tag="binA"):
     mod_l  = 1.0*oneh + twoh_l
     chi2_l = chi2(mod_l, DS, cov=C, sigma=S)
     nu_l   = len(R) - len(res2.x)
+
+    # GR-kernel control (λ=0): fit A1h, b0, b2 with lam fixed to 0
+    def residual_gr(z):
+        A1h, b0, b2 = z
+        twoh_gr = model_2h(R, k, Pnl, b0, b2, 0.0)
+        mod_gr  = A1h*oneh + twoh_gr
+        if C is not None:
+            try:
+                L = np.linalg.cholesky(C)
+                return np.linalg.solve(L, mod_gr-DS)
+            except Exception:
+                pass
+        return (mod_gr-DS)/S
+
+    z0 = [float(out_free['A1h']), float(out_free['b0']), float(out_free['b2'])]
+    lbz = [man["fitting"]["bounds"]["A1h"][0], man["fitting"]["bounds"]["b0"][0], man["fitting"]["bounds"]["b2"][0]]
+    ubz = [man["fitting"]["bounds"]["A1h"][1], man["fitting"]["bounds"]["b0"][1], man["fitting"]["bounds"]["b2"][1]]
+    res_gr = optimize.least_squares(residual_gr, z0, bounds=(lbz, ubz), xtol=1e-10, ftol=1e-10, gtol=1e-10, max_nfev=2000)
+    A1h_g, b0_g, b2_g = res_gr.x
+    twoh_g = model_2h(R, k, Pnl, b0_g, b2_g, 0.0)
+    mod_g  = A1h_g*oneh + twoh_g
+    chi2_g = chi2(mod_g, DS, cov=C, sigma=S)
+    nu_g   = len(R) - len(res_gr.x)
+    out_gr = {
+        "bin": bin_sel,
+        "mode": "GRkernel",
+        "A1h": float(A1h_g), "b0": float(b0_g), "b2": float(b2_g), "lam": 0.0,
+        "chi2": float(chi2_g), "nu": int(nu_g), "chi2/nu": float(chi2_g/max(nu_g,1))
+    }
+
+    # ΔAIC/ΔBIC vs GR: free-A (k=4) vs GR (k=3); A1 (k=3) vs GR (k=3)
+    aic_free, bic_free = aic_bic(4, out_free["chi2"], len(R))
+    aic_lock, bic_lock = aic_bic(3, out_lock["chi2"], len(R))
+    aic_gr,   bic_gr   = aic_bic(3, out_gr["chi2"],   len(R))
+
+    out_free["AIC"] = aic_free; out_free["BIC"] = bic_free
+    out_lock["AIC"] = aic_lock; out_lock["BIC"] = bic_lock
+    out_gr["AIC"]   = aic_gr;   out_gr["BIC"]   = bic_gr
+    out_free["ΔAIC_vs_GR"] = aic_free - aic_gr; out_free["ΔBIC_vs_GR"] = bic_free - bic_gr
+    out_lock["ΔAIC_vs_GR"] = aic_lock - aic_gr; out_lock["ΔBIC_vs_GR"] = bic_lock - bic_gr
     out_lock = {
-        "bin": "A",
+        "bin": bin_sel,
         "mode": "A1",
         "A1h": 1.0, "b0": float(b0_l), "b2": float(b2_l), "lam": float(lam_l),
         "chi2": float(chi2_l), "nu": int(nu_l), "chi2/nu": float(chi2_l/max(nu_l,1))
@@ -166,9 +226,9 @@ def fit_binA(man, out_tag="binA"):
 
     # Save outputs
     os.makedirs("results/tables", exist_ok=True)
-    with open(f"results/tables/{out_tag}_fit_freeA.json","w") as f:
+    with open(f"results/tables/{out_tag}_{bin_sel}_fit_freeA.json","w") as f:
         json.dump(out_free, f, indent=2)
-    with open(f"results/tables/{out_tag}_fit_A1.json","w") as f:
+    with open(f"results/tables/{out_tag}_{bin_sel}_fit_A1.json","w") as f:
         json.dump(out_lock, f, indent=2)
 
     # Plots
@@ -187,19 +247,35 @@ def fit_binA(man, out_tag="binA"):
         plt.title(f"Bin-A overlay ({tag})")
         plt.legend()
         plt.tight_layout()
-        plt.savefig(f"figures/lensing/{out_tag}_overlay_{tag}.png", dpi=160)
+        plt.savefig(f"figures/lensing/{out_tag}_{bin_sel}_overlay_{tag}.png", dpi=160)
         plt.close()
+    # Save GR JSON and overlay
+    with open(f"results/tables/{out_tag}_{bin_sel}_fit_GR.json","w") as f:
+        json.dump(out_gr, f, indent=2)
+    plt.figure(figsize=(6.2,4.6))
+    plt.errorbar(R, DS, yerr=S, fmt='o', ms=4, alpha=0.8, label=f"KiDS Bin-{bin_sel}")
+    plt.plot(R, oneh*A1h_g, lw=2, label=f"1-halo x {A1h_g:.2f}")
+    plt.plot(R, twoh_g, lw=2, label="2-halo (GR kernel)")
+    plt.plot(R, mod_g, lw=2.2, label="total (GR)")
+    plt.xscale("log"); plt.yscale("log")
+    plt.xlabel("R [Mpc]"); plt.ylabel(r"$\Delta\Sigma\ [M_\odot/{\rm kpc}^2]$")
+    plt.title(f"Bin-{bin_sel} overlay (GR-kernel)")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(f"figures/lensing/{out_tag}_{bin_sel}_overlay_GR.png", dpi=160)
+    plt.close()
+
 
     print("FREE-A:", out_free)
     print("A1-LOCKED:", out_lock)
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Covariance-aware Bin-A fit: free-A and A1-locked")
-    ap.add_argument("--manifest", default="configs/run_manifest.yaml")
+    ap = argparse.ArgumentParser(description="Covariance-aware fit: free-A, A1-locked, and GR control")
+    ap.add_argument("--manifest", default="configs/run_manifest.yaml"); ap.add_argument("--bin", default="A")
     args = ap.parse_args()
     man = load_manifest(args.manifest)
-    fit_binA(man, out_tag="binA")
+    fit_bin(man, out_tag="bin", bin_sel=args.bin)
 
 if __name__ == "__main__":
     main()
