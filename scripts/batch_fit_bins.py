@@ -39,72 +39,140 @@ def load_kids_clean(csv_path, cov_path=None):
     return R, DS, S, C
 
 
+
 def load_routeA_1h(csv_path, R_target):
-    """Load Route-A 1-halo profile robustly and interpolate onto R_target.
-       Accepts 2-col no-header (R, ΔΣ_1h), named columns, different delimiters.
-       If only 'total' and '2h' exist, computes 1h = total - 2h."""
-    import pandas as pd, numpy as np
-    candidates_1h = [
-        "deltasigma_1h","ds_1h","one_halo","1h","baryons_only","deltasigma1h","ds1h"
-    ]
-    candidates_R = ["r","radius_mpc","r_mpc"]
-    def try_read(hdr):
-        # sep=None lets pandas sniff delimiter (commas/semicolons/tabs)
-        return pd.read_csv(csv_path, header=hdr, sep=None, engine="python")
-    for hdr in [None, 0]:
-        try:
-            df = try_read(hdr)
-        except Exception:
-            continue
-        # numeric only copy helps identify 2-col files
-        numcols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
-        # 2-col numeric → assume R, 1h
-        if len(df.columns)==2 or len(numcols)==2:
-            c0, c1 = (numcols if len(numcols)==2 else list(df.columns)[:2])
-            Rtab = df[c0].astype(float).values
-            oneh = df[c1].astype(float).values
-            break
-        cols = {c.lower().strip(): c for c in df.columns}
-        # find R
-        Rcol = None
-        for k in candidates_R:
-            if k in cols:
-                Rcol = cols[k]; break
+    """Robust Route-A 1-halo loader.
+       Accepts:
+         • two-column files (R, 1h) with/without header (coerces numerics);
+         • named columns with varied names (R, DeltaSigma_1h, etc.);
+         • single-file with total & 2h columns → computes 1h = total − 2h;
+         • two-file case: if csv_path refers to ...total.csv (or ...2halo.csv),
+           look for sibling ...2halo.csv (or ...total.csv) and compute 1h.
+    """
+    import pandas as pd, numpy as np, os, re
+    from scipy import interpolate
+
+    def try_read(path, hdr):
+        # sep=None lets pandas sniff the delimiter; engine='python' is more permissive
+        return pd.read_csv(path, header=hdr, sep=None, engine="python")
+
+    def numeric_two_col(df):
+        """If the file is effectively two columns, coerce both to numeric and drop NaNs."""
+        if df.shape[1] == 2:
+            c0, c1 = list(df.columns)[:2]
+            x = pd.to_numeric(df[c0], errors="coerce")
+            y = pd.to_numeric(df[c1], errors="coerce")
+            m = x.notna() & y.notna()
+            if m.sum() >= 3:
+                return x[m].to_numpy(dtype=float), y[m].to_numpy(dtype=float)
+        # also try using the first two *numeric-looking* columns
+        num = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+        if len(num) == 2:
+            x = df[num[0]].to_numpy(dtype=float)
+            y = df[num[1]].to_numpy(dtype=float)
+            if x.size >= 3:
+                return x, y
+        return None, None
+
+    def named_onefile(df):
+        """Handle named columns in a single file."""
+        cols = {str(c).lower().strip(): c for c in df.columns}
+        # R column
+        Rcol = cols.get("r") or cols.get("radius_mpc") or cols.get("r_mpc")
         if Rcol is None:
-            # fallback: first column if numeric-looking
-            Rcol = list(df.columns)[0]
-        # find 1h
+            cand = df.columns[0]
+            if pd.api.types.is_numeric_dtype(df[cand]):
+                Rcol = cand
+        # 1h direct candidates
+        oneh_keys = ["deltasigma_1h","ds_1h","one_halo","1h","baryons_only","deltasigma1h","ds1h"]
         Dcol = None
-        for k in candidates_1h:
+        for k in oneh_keys:
             if k in cols:
                 Dcol = cols[k]; break
-        if Dcol is None:
-            # try to reconstruct from total and 2h
-            tot = cols.get("total") or cols.get("deltasigma_total") or cols.get("ds_total")
-            two = cols.get("2h") or cols.get("ds_2h") or cols.get("deltasigma_2h")
-            if tot and two:
-                oneh_series = df[tot].astype(float) - df[two].astype(float)
-                Rtab = df[Rcol].astype(float).values
-                oneh = oneh_series.values
-                break
-            else:
-                # try last numeric column as 1h
-                cand = None
-                for c in df.columns[::-1]:
-                    if pd.api.types.is_numeric_dtype(df[c]):
-                        cand = c; break
-                if cand is not None:
-                    Rtab = df[Rcol].astype(float).values
-                    oneh = df[cand].astype(float).values
-                    break
-        else:
-            Rtab = df[Rcol].astype(float).values
-            oneh = df[Dcol].astype(float).values
+        # Or reconstruct: total − 2h
+        tot = cols.get("total") or cols.get("deltasigma_total") or cols.get("ds_total")
+        two = cols.get("2h") or cols.get("ds_2h") or cols.get("deltasigma_2h")
+        if Rcol is not None and Dcol is not None:
+            Rtab = pd.to_numeric(df[Rcol], errors="coerce")
+            oneh = pd.to_numeric(df[Dcol], errors="coerce")
+            m = Rtab.notna() & oneh.notna()
+            if m.sum() >= 3:
+                return Rtab[m].to_numpy(dtype=float), oneh[m].to_numpy(dtype=float)
+        if Rcol is not None and tot and two:
+            Rtab = pd.to_numeric(df[Rcol], errors="coerce")
+            t    = pd.to_numeric(df[tot], errors="coerce")
+            h2   = pd.to_numeric(df[two], errors="coerce")
+            m = Rtab.notna() & t.notna() & h2.notna()
+            if m.sum() >= 3:
+                return Rtab[m].to_numpy(dtype=float), (t[m]-h2[m]).to_numpy(dtype=float)
+        return None, None
+
+    def twofile_siblings(path):
+        """If we have separate total and 2h CSVs, compute 1h by interpolation and subtraction."""
+        stem = Path(path)
+        name = stem.name.lower()
+        sib = None
+        if "total" in name:
+            sib = stem.with_name(stem.name.replace("total","2halo"))
+        elif "2halo" in name:
+            sib = stem.with_name(stem.name.replace("2halo","total"))
+        if (sib is None or not sib.exists()):
+            # try variants with underscores
+            for a,b in [("_total","_2halo"), ("_2halo","_total")]:
+                alt = stem.with_name(stem.name.replace(a,b))
+                if alt.exists():
+                    sib = alt; break
+        if sib is None or not sib.exists():
+            return None, None
+        # read both
+        for hdr in [0, None]:
+            try:
+                df1 = try_read(str(stem), hdr)
+                df2 = try_read(str(sib),  hdr)
+            except Exception:
+                continue
+            # coerce numeric candidates
+            def pick_xy(df):
+                # prefer first two columns coerced to numeric
+                cols = list(df.columns)
+                x = pd.to_numeric(df[cols[0]], errors="coerce")
+                y = pd.to_numeric(df[cols[1]], errors="coerce") if len(cols)>1 else None
+                return x, y
+            R1, V1 = pick_xy(df1); R2, V2 = pick_xy(df2)
+            if V1 is None or V2 is None: 
+                continue
+            m1 = R1.notna() & V1.notna()
+            m2 = R2.notna() & V2.notna()
+            if m1.sum()<3 or m2.sum()<3:
+                continue
+            Rtab = R1[m1].to_numpy(dtype=float)
+            t    = V1[m1].to_numpy(dtype=float)
+            R2n  = R2[m2].to_numpy(dtype=float)
+            h2n  = V2[m2].to_numpy(dtype=float)
+            # interpolate sibling 2h onto Rtab
+            h2i  = np.interp(Rtab, R2n, h2n)
+            return Rtab, (t - h2i)
+        return None, None
+
+    # Try header=0 then header=None
+    for hdr in [0, None]:
+        try:
+            df = try_read(csv_path, hdr)
+        except Exception:
+            continue
+        Rtab, oneh = numeric_two_col(df)
+        if Rtab is not None:
+            break
+        Rtab, oneh = named_onefile(df)
+        if Rtab is not None:
             break
     else:
-        raise ValueError(f"Cannot parse 1-halo CSV: {csv_path}")
-    # Interpolate
-    from scipy import interpolate
+        # last attempt: two-file sibling
+        Rtab, oneh = twofile_siblings(csv_path)
+        if Rtab is None:
+            raise ValueError(f"Cannot parse 1-halo CSV: {csv_path}")
+
+    # Interpolate to target radii
     f = interpolate.InterpolatedUnivariateSpline(Rtab, oneh, k=1, ext=1)
     return f(R_target)
 
