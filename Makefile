@@ -5,6 +5,7 @@ env:
 
 data:
 \tpython -m src.pfgm.dataio --validate data/raw || true
+\tpython scripts/ggl_to_deltasigma.py --input data/raw/kids/KiDS_binA.csv --output data/processed/lensing/DeltaSigma_binA_clean.csv
 
 figs:
 \tpython scripts/btfr_build.py || true
