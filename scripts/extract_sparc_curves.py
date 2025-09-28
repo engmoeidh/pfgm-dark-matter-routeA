@@ -120,7 +120,7 @@ def main():
     nz = 0; ok = 0; fail = 0
     with zipfile.ZipFile(IN_ZIP, "r") as zf:
         for name in zf.namelist():
-            if name.endswith("/") or not (name.lower().endswith(".txt") or name.lower().endswith(".csv")):
+            if name.endswith("/") or not (name.lower().endswith('.txt') or name.lower().endswith('.csv') or name.lower().endswith('.dat')):
                 continue
             nz += 1
             raw = zf.read(name).decode("utf-8","ignore")
