@@ -1,125 +1,121 @@
 import os, io, re, zipfile
 import numpy as np
 import pandas as pd
+from pathlib import Path
 
-IN_ZIP   = "data/raw/sparc/Rotmod_LTG.zip"
-OUT_DIR  = "data/raw/sparc/curves"
+IN_ZIP  = "data/raw/sparc/Rotmod_LTG.zip"
+OUT_DIR = "data/raw/sparc/curves"
 
-# Column name candidates (lowercased, stripped)
-R_KEYS      = ["r_kpc","r (kpc)","radius_kpc","radius (kpc)","r","radius"]
-VOBS_KEYS   = ["vobs","v_obs","vrot","vrot_kms","v_rot","v_obs_kms"]
-VDISK_KEYS  = ["vdisk","v_disk","vstars_disk","v_stars_disk","vd"]
-VBULGE_KEYS = ["vbulge","v_bulge","vstars_bulge","v_stars_bulge","vb"]
-VGAS_KEYS   = ["vgas","v_gas","vhi","v_hi","vneutral","v_neutral"]
-
-def pick(df, keys):
-    cols = {str(c).lower().strip(): c for c in df.columns}
-    for k in keys:
-        if k in cols: return cols[k]
-    return None
-
-def clean_numeric(s):
-    # Remove units or weird strings like 'kpc' 'km/s'
-    if isinstance(s, str):
-        s = re.sub(r"[^\d\.\-eE+]", " ", s)
-    return s
-
-def read_table(raw):
-    # Try flexible CSV read (delimiter sniffing; ignore comment lines)
+def read_table(raw_text):
+    """
+    Try to read a ROTMOD table from text.
+    1) flexible CSV (delimiter sniffing; ignore comments)
+    2) fallback whitespace (no header)
+    Returns a DataFrame or None.
+    """
+    # try CSV-like
     for hdr in [0, None]:
         try:
-            df = pd.read_csv(io.StringIO(raw), header=hdr, sep=None, engine="python", comment='#')
+            df = pd.read_csv(io.StringIO(raw_text), header=hdr, sep=None, engine="python", comment="#")
             if df.shape[1] >= 2:
-                # strip whitespace in header
                 df.columns = [str(c).strip() for c in df.columns]
                 return df
         except Exception:
-            continue
-    # Fallback: whitespace split
+            pass
+    # try whitespace
     try:
-        df = pd.read_csv(io.StringIO(raw), delim_whitespace=True, comment='#', header=None)
-        # create generic headers
-        df.columns = [f"col{i}" for i in range(df.shape[1])]
+        df = pd.read_csv(io.StringIO(raw_text), sep=r"\s+", engine="python", comment="#", header=None)
+        ncols = df.shape[1]
+        df.columns = [f"col{i}" for i in range(ncols)]
         return df
     except Exception:
         return None
 
 
-
 def to_curve(df):
     """
-    Normalize a raw ROTMOD table (headered or headerless) into [R_kpc, V_obs_kms, V_baryon_kms].
-    """
+    Normalize raw ROTMOD DataFrame to columns:
+      R_kpc, V_obs_kms, V_baryon_kms
 
+    Strategy:
+      • If headerless (col0, col1, ...): try several plausible SPARC layouts:
+          Layout A: R, Vobs, Verr, Vgas, Vdisk, Vbulge
+          Layout B: R, Vgas, Vdisk, Vbulge, Vobs
+          Layout C: R, Vobs, Vgas, Vdisk, (Vbulge)
+      • If headered: pick by common names.
+      • Require V_obs and ≥1 of (gas, disk, bulge).
+    """
     import numpy as np
     import pandas as pd
 
-    # --- Case 1: headerless .dat (columns named col0, col1, …) ---
+    def build_out(R, Vobs, comps):
+        parts = []
+        for c in comps:
+            if c is not None:
+                parts.append(pd.to_numeric(c, errors="coerce").to_numpy(dtype=float)**2)
+        if len(parts) == 0:
+            return None
+        Vbar = np.sqrt(np.sum(parts, axis=0))
+        Rn    = pd.to_numeric(R,    errors="coerce")
+        Vobsn = pd.to_numeric(Vobs, errors="coerce")
+        m = Rn.notna() & Vobsn.notna() & np.isfinite(Vbar)
+        if m.sum() < 6:  # need at least a handful of points
+            return None
+        out = pd.DataFrame({
+            "R_kpc":        Rn[m].to_numpy(dtype=float),
+            "V_obs_kms":    Vobsn[m].to_numpy(dtype=float),
+            "V_baryon_kms": Vbar[m],
+        })
+        out = out.sort_values("R_kpc").drop_duplicates(subset="R_kpc")
+        return out if len(out) >= 6 else None
+
+    # ---- Headerless case: columns named col* ----
     if all(str(c).startswith("col") for c in df.columns):
         cols = list(df.columns)
-        # Typical SPARC order: R, Vobs, Verr, Vgas, Vdisk, Vbulge
-        if len(cols) >= 6:
-            df = df.rename(columns={
-                cols[0]: "R_kpc",
-                cols[1]: "V_obs_kms",
-                cols[3]: "V_gas",
-                cols[4]: "V_disk",
-                cols[5]: "V_bulge",
-            })
-        elif len(cols) >= 5:
-            df = df.rename(columns={
-                cols[0]: "R_kpc",
-                cols[1]: "V_obs_kms",
-                cols[3]: "V_gas",
-                cols[4]: "V_disk",
-            })
-        else:
-            df = df.rename(columns={
-                cols[0]: "R_kpc",
-                cols[1]: "V_obs_kms",
-            })
+        n = len(cols)
+        # Pull by index helper (returns None if missing)
+        def col(i): return df[cols[i]] if i < n else None
 
-    # --- Try to locate columns by common names ---
+        # Try Layout A: [0]=R, [1]=Vobs, [3]=Vgas, [4]=Vdisk, [5]=Vbulge
+        out = build_out(col(0), col(1), [col(3), col(4), col(5)])
+        if out is not None:
+            return out
+
+        # Try Layout B: [0]=R, [4]=Vobs (last), [1]=Vgas, [2]=Vdisk, [3]=Vbulge
+        out = build_out(col(0), col(max(1, n-1)), [col(1), col(2), col(3)])
+        if out is not None:
+            return out
+
+        # Try Layout C: [0]=R, [1]=Vobs, [2]=Vgas, [3]=Vdisk, [4]=Vbulge
+        out = build_out(col(0), col(1), [col(2), col(3), col(4)])
+        if out is not None:
+            return out
+
+        # If still failing but we have at least 5 cols, brute-force: treat the last column as Vobs, preceding three as baryons
+        if n >= 5:
+            out = build_out(col(0), col(n-1), [col(1), col(2), col(3)])
+            if out is not None:
+                return out
+
+        return None
+
+    # ---- Headered case: map by name (more stable) ----
     cols_low = {str(c).lower().strip(): c for c in df.columns}
-    Rcol = None
-    for k in ["r_kpc","radius","r"]:
-        if k in cols_low: Rcol = cols_low[k]; break
-    Vobs_col = None
-    for k in ["vobs","v_obs","vrot","v_obs_kms"]:
-        if k in cols_low: Vobs_col = cols_low[k]; break
-    Vd_col = None
-    for k in ["vdisk","v_disk"]: 
-        if k in cols_low: Vd_col = cols_low[k]; break
-    Vb_col = None
-    for k in ["vbulge","v_bulge"]:
-        if k in cols_low: Vb_col = cols_low[k]; break
-    Vg_col = None
-    for k in ["vgas","v_gas"]:
-        if k in cols_low: Vg_col = cols_low[k]; break
-
-    if Rcol is None or Vobs_col is None:
+    def pick(*keys):
+        for k in keys:
+            if k in cols_low: return cols_low[k]
         return None
 
-    # Extract numeric arrays
-    R = pd.to_numeric(df[Rcol], errors="coerce")
-    Vobs = pd.to_numeric(df[Vobs_col], errors="coerce")
-    parts = []
-    for col in [Vd_col, Vb_col, Vg_col]:
-        if col is not None:
-            parts.append(pd.to_numeric(df[col], errors="coerce").to_numpy(dtype=float)**2)
+    Rcol   = pick("r_kpc","radius_kpc","r","radius")
+    Vobs   = pick("v_obs_kms","vobs","v_obs","vrot","v_rot")
+    Vgas   = pick("v_gas","vgas","vhi","v_hi")
+    Vdisk  = pick("v_disk","vdisk","vstars_disk","v_stars_disk")
+    Vbulge = pick("v_bulge","vbulge","vstars_bulge","v_stars_bulge")
 
-    if len(parts) == 0:
+    if Rcol is None or Vobs is None:
         return None
 
-    Vbar = np.sqrt(np.sum(parts, axis=0))
-    m = R.notna() & Vobs.notna() & np.isfinite(Vbar)
-    out = pd.DataFrame({
-        "R_kpc": R[m].to_numpy(dtype=float),
-        "V_obs_kms": Vobs[m].to_numpy(dtype=float),
-        "V_baryon_kms": Vbar[m],
-    })
-    out = out.sort_values("R_kpc").drop_duplicates(subset="R_kpc")
-    return out if len(out) >= 6 else None
+    return build_out(df[Rcol], df[Vobs], [df[c] for c in [Vgas, Vdisk, Vbulge] if c is not None])
 
 
 def main():
@@ -127,46 +123,36 @@ def main():
         raise FileNotFoundError(IN_ZIP)
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    nz = 0; ok = 0; fail = 0
+    ok = 0; fail = 0; total = 0
     with zipfile.ZipFile(IN_ZIP, "r") as zf:
         for name in zf.namelist():
-            if name.endswith("/") or not (name.lower().endswith('.txt') or name.lower().endswith('.csv') or name.lower().endswith('.dat')):
+            if name.endswith("/"): 
                 continue
-            nz += 1
-            raw = zf.read(name).decode("utf-8","ignore")
+            ext = name.lower().rsplit(".",1)[-1]
+            if ext not in {"dat","txt","csv"}:
+                continue
+            total += 1
+            try:
+                raw = zf.read(name).decode("utf-8","ignore")
+            except Exception:
+                try:
+                    raw = zf.read(name).decode("latin-1","ignore")
+                except Exception:
+                    fail += 1
+                    continue
             df = read_table(raw)
-
-    # Fallback for headerless ROTMOD tables:
-    if df is not None and all(str(c).startswith("col") for c in df.columns):
-        # Typical SPARC ROTMOD order: R[kpc], Vobs, Verr, Vgas, Vdisk, Vbulge
-        cols = list(df.columns)
-        mapping = {}
-        if len(cols) >= 6:
-            mapping = {cols[0]:"R_kpc", cols[1]:"Vobs", cols[3]:"Vgas", cols[4]:"Vdisk", cols[5]:"Vbulge"}
-        elif len(cols) >= 5:
-            mapping = {cols[0]:"R_kpc", cols[1]:"Vobs", cols[3]:"Vgas", cols[4]:"Vdisk"}
-        else:
-            mapping = {cols[0]:"R_kpc", cols[1]:"Vobs"}
-        df = df.rename(columns=mapping)
-
             if df is None:
-                fail += 1
-                continue
-            curve = to_curve(df)
-            if curve is None:
-                fail += 1
-                continue
-            # Galaxy name from filename stem
-            gal = os.path.splitext(os.path.basename(name))[0]
-            # Tidy galaxy name (remove spaces that break filenames)
-            gal = gal.replace(" ", "_")
-            curve.insert(0, "Galaxy", gal)
+                fail += 1; continue
+            cur = to_curve(df)
+            if cur is None:
+                fail += 1; continue
+            gal = Path(name).stem.replace(" ", "_")
+            cur.insert(0, "Galaxy", gal)
             outp = os.path.join(OUT_DIR, f"{gal}.csv")
-            curve.to_csv(outp, index=False)
+            cur.to_csv(outp, index=False)
             ok += 1
-            print(f"Wrote {outp} ({len(curve)} rows)")
-
-    print(f"Scanned {nz} files in ZIP: extracted {ok}, failed {fail}")
+            print(f"Wrote {outp} ({len(cur)} rows)")
+    print(f"Scanned {total} files in ZIP: extracted {ok}, failed {fail}")
     print(f"Curves directory: {OUT_DIR}")
 
 if __name__ == "__main__":
