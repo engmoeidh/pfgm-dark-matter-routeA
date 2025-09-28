@@ -44,73 +44,82 @@ def read_table(raw):
     except Exception:
         return None
 
+
 def to_curve(df):
-    # Normalize numerics
-    for c in df.columns:
-        try:
-            df[c] = pd.to_numeric(df[c].apply(clean_numeric), errors="ignore")
-        except Exception:
-            pass
+    """
+    Normalize a raw ROTMOD table (headered or headerless) into [R_kpc, V_obs_kms, V_baryon_kms].
+    """
 
-    # Map columns by candidates (case-insensitive)
+    import numpy as np
+    import pandas as pd
+
+    # --- Case 1: headerless .dat (columns named col0, col1, …) ---
+    if all(str(c).startswith("col") for c in df.columns):
+        cols = list(df.columns)
+        # Typical SPARC order: R, Vobs, Verr, Vgas, Vdisk, Vbulge
+        if len(cols) >= 6:
+            df = df.rename(columns={
+                cols[0]: "R_kpc",
+                cols[1]: "V_obs_kms",
+                cols[3]: "V_gas",
+                cols[4]: "V_disk",
+                cols[5]: "V_bulge",
+            })
+        elif len(cols) >= 5:
+            df = df.rename(columns={
+                cols[0]: "R_kpc",
+                cols[1]: "V_obs_kms",
+                cols[3]: "V_gas",
+                cols[4]: "V_disk",
+            })
+        else:
+            df = df.rename(columns={
+                cols[0]: "R_kpc",
+                cols[1]: "V_obs_kms",
+            })
+
+    # --- Try to locate columns by common names ---
     cols_low = {str(c).lower().strip(): c for c in df.columns}
-    def pick_col(keys):
-        for k in keys:
-            if k in cols_low:
-                return cols_low[k]
+    Rcol = None
+    for k in ["r_kpc","radius","r"]:
+        if k in cols_low: Rcol = cols_low[k]; break
+    Vobs_col = None
+    for k in ["vobs","v_obs","vrot","v_obs_kms"]:
+        if k in cols_low: Vobs_col = cols_low[k]; break
+    Vd_col = None
+    for k in ["vdisk","v_disk"]: 
+        if k in cols_low: Vd_col = cols_low[k]; break
+    Vb_col = None
+    for k in ["vbulge","v_bulge"]:
+        if k in cols_low: Vb_col = cols_low[k]; break
+    Vg_col = None
+    for k in ["vgas","v_gas"]:
+        if k in cols_low: Vg_col = cols_low[k]; break
+
+    if Rcol is None or Vobs_col is None:
         return None
 
-    Rcol     = pick_col(R_KEYS)
-    Vobs_col = pick_col(VOBS_KEYS)
-    Vd_col   = pick_col(VDISK_KEYS)
-    Vb_col   = pick_col(VBULGE_KEYS)
-    Vg_col   = pick_col(VGAS_KEYS)
-
-    # Must have R and at least baryonic components or vobs
-    if Rcol is None:
-        return None
-
-    # Coerce numerics; drop non-finite
-    R  = pd.to_numeric(df[Rcol], errors="coerce")
-    Vobs = pd.to_numeric(df[Vobs_col], errors="coerce") if Vobs_col else None
-    Vd   = pd.to_numeric(df[Vd_col],   errors="coerce") if Vd_col   else None
-    Vb   = pd.to_numeric(df[Vb_col],   errors="coerce") if Vb_col   else None
-    Vg   = pd.to_numeric(df[Vg_col],   errors="coerce") if Vg_col   else None
-
-    m = R.notna()
-    if Vobs is not None: m &= Vobs.notna()
-    if Vd   is not None: m &= Vd.notna()
-    if Vb   is not None: m &= Vb.notna()
-    if Vg   is not None: m &= Vg.notna()
-    dfc = pd.DataFrame({"R_kpc": R[m]})
-    if dfc.empty: return None
-
-    # Build baryonic velocity (sum in quadrature of available components)
+    # Extract numeric arrays
+    R = pd.to_numeric(df[Rcol], errors="coerce")
+    Vobs = pd.to_numeric(df[Vobs_col], errors="coerce")
     parts = []
-    for comp in [Vd, Vb, Vg]:
-        if comp is not None:
-            parts.append(comp[m].to_numpy(dtype=float)**2)
-    if len(parts)==0:
+    for col in [Vd_col, Vb_col, Vg_col]:
+        if col is not None:
+            parts.append(pd.to_numeric(df[col], errors="coerce").to_numpy(dtype=float)**2)
+
+    if len(parts) == 0:
         return None
+
     Vbar = np.sqrt(np.sum(parts, axis=0))
-
-    out = pd.DataFrame({"R_kpc": dfc["R_kpc"].to_numpy(dtype=float),
-                        "V_baryon_kms": Vbar})
-
-    # Observed velocity if present
-    if Vobs is not None:
-        out["V_obs_kms"] = Vobs[m].to_numpy(dtype=float)
-    else:
-        # If no observed column, skip; we need V_obs for the phenomenological residual fit
-        return None
-
-    # Sort by R and drop duplicates
+    m = R.notna() & Vobs.notna() & np.isfinite(Vbar)
+    out = pd.DataFrame({
+        "R_kpc": R[m].to_numpy(dtype=float),
+        "V_obs_kms": Vobs[m].to_numpy(dtype=float),
+        "V_baryon_kms": Vbar[m],
+    })
     out = out.sort_values("R_kpc").drop_duplicates(subset="R_kpc")
-    # Keep only finite, positive radii and velocities
-    out = out[(out["R_kpc"]>0) & np.isfinite(out["V_baryon_kms"]) & np.isfinite(out["V_obs_kms"])]
-    if len(out) < 6:
-        return None
-    return out[["R_kpc","V_obs_kms","V_baryon_kms"]]
+    return out if len(out) >= 6 else None
+
 
 def main():
     if not os.path.isfile(IN_ZIP):
