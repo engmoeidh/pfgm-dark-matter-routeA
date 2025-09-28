@@ -125,6 +125,20 @@ def main():
             nz += 1
             raw = zf.read(name).decode("utf-8","ignore")
             df = read_table(raw)
+
+    # Fallback for headerless ROTMOD tables:
+    if df is not None and all(str(c).startswith("col") for c in df.columns):
+        # Typical SPARC ROTMOD order: R[kpc], Vobs, Verr, Vgas, Vdisk, Vbulge
+        cols = list(df.columns)
+        mapping = {}
+        if len(cols) >= 6:
+            mapping = {cols[0]:"R_kpc", cols[1]:"Vobs", cols[3]:"Vgas", cols[4]:"Vdisk", cols[5]:"Vbulge"}
+        elif len(cols) >= 5:
+            mapping = {cols[0]:"R_kpc", cols[1]:"Vobs", cols[3]:"Vgas", cols[4]:"Vdisk"}
+        else:
+            mapping = {cols[0]:"R_kpc", cols[1]:"Vobs"}
+        df = df.rename(columns=mapping)
+
             if df is None:
                 fail += 1
                 continue
