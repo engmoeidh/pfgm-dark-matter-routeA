@@ -1,4 +1,4 @@
-.PHONY: env data figs tables test all
+.PHONY: env data figs tables fit test all
 
 env:
 \tconda env create -f environment.yml || conda env update -f environment.yml
@@ -14,7 +14,10 @@ figs:
 tables:
 \tpython -m src.pfgm.stats --summarize results/tables || true
 
+fit:
+\tpython scripts/batch_fit_bins.py --manifest configs/run_manifest.yaml
+
 test:
 \tpytest -q || true
 
-all: data figs tables test
+all: data fit figs tables test
