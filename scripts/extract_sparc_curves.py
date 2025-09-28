@@ -45,6 +45,7 @@ def read_table(raw):
         return None
 
 
+
 def to_curve(df):
     """
     Normalize a raw ROTMOD table (headered or headerless) into [R_kpc, V_obs_kms, V_baryon_kms].
