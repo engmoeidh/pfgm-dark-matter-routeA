@@ -213,22 +213,22 @@ def aic_bic(k_params, chi2_val, n_points):
     return float(aic), float(bic)
 
 
-def choose_paths(man, bin_tag):
-    bin_tag = bin_tag.upper()
-    if bin_tag == "A":
-        kids = man["paths"]["kids_binA_clean"]
-        oneh = man["paths"]["routeA_1h_binA"]
-    elif bin_tag == "B":
-        kids = man["paths"]["kids_binB_clean"]
-        oneh = man["paths"]["routeA_1h_binB"]
-    elif bin_tag == "C":
-        kids = man["paths"]["kids_binC_clean"]
-        oneh = man["paths"]["routeA_1h_binC"]
-    else:
-        raise ValueError("Unknown bin; use A, B or C")
-    cov = man["paths"].get(f"kids_bin{bin_tag}_cov")
-    return kids, oneh, cov
 
+
+def choose_paths(man, bin_tag):
+    """
+    Generic resolver: looks for manifest keys
+      kids_bin<UPCASE>_clean
+      routeA_1h_bin<UPCASE>
+    e.g. A, B, C, LOWZ, CMASS.
+    """
+    key = str(bin_tag).upper()
+    kids = man["paths"].get(f"kids_bin{key}_clean")
+    oneh = man["paths"].get(f"routeA_1h_bin{key}")
+    if kids is None or oneh is None:
+        raise ValueError(f"Missing manifest paths for bin {key}")
+    cov  = man["paths"].get(f"kids_bin{key}_cov")
+    return kids, oneh, cov
 
 def fit_bin(man, out_tag="bin", bin_sel="A", do_gr_control=True):
     # Load inputs
