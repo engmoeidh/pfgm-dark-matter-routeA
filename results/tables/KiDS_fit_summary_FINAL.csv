@@ -1,3 +1,4 @@
-survey,bin,lambda_mpc,lambda_err_minus,lambda_err_plus,edge,chi2_red,source
-KiDS,A,,,,,,
-KiDS,B,,,,,,
+bin,lambda_mpc,lambda_err_minus,lambda_err_plus,chi2_red,AIC,BIC,is_gr,edge,source,dAIC_vs_GR,dBIC_vs_GR
+A,0.17765324836054003,,,19.948812905389048,227.43694195927952,230.26914276368836,0,0,results\tables\bin_A_fit_freeA.json,1.927997617651755,2.6360478187539798
+B,0.12345490779758075,,,4.42263008943328,56.648930983766085,59.48113178817493,0,0,results\tables\bin_B_fit_freeA.json,-51.16562801501875,-50.45757781391654
+C,4.999999999999999,,,1.2791820142492512,22.071002156741763,24.903202961150605,0,1,results\tables\bin_C_fit_freeA.json,2.607781620143019,3.315831821245233
