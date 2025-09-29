@@ -1,6 +1,4 @@
-*.png filter=lfs diff=lfs merge=lfs
-*.jpg filter=lfs diff=lfs merge=lfs
-*.pdf filter=lfs diff=lfs merge=lfs
-*.zip filter=lfs diff=lfs merge=lfs
-*.tar.gz filter=lfs diff=lfs merge=lfs
-*.fits filter=lfs diff=lfs merge=lfs
+* text=auto
+*.py text eol=lf
+*.tex text eol=lf
+*.csv text eol=lf
