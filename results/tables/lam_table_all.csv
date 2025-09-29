@@ -1,3 +1,5 @@
 survey,bin,lambda_mpc,lambda_err_minus,lambda_err_plus,edge,chi2_red
 KiDS,A,,,,,
 KiDS,B,,,,,
+SDSS,CMASS,,,,0.0,
+SDSS,LOWZ,,,,0.0,

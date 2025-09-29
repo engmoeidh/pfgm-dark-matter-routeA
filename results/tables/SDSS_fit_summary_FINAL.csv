@@ -1,0 +1,3 @@
+survey,bin,lambda_mpc,lambda_err_minus,lambda_err_plus,edge,chi2_red,source
+SDSS,CMASS,,,,0,,results\tables\bin_CMASS_fit_A1.json
+SDSS,LOWZ,,,,0,,results\tables\bin_LOWZ_fit_A1.json
