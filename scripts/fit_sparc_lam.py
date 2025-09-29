@@ -2,6 +2,7 @@ import os, glob
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from src.pfgm.routea_rc import load_struct_scales, routea_rc_model_sq
 from scipy import optimize
 
 # --- Locations and outputs ---
@@ -74,8 +75,25 @@ def fit_one(gal, df):
     if len(R) < 6:
         raise ValueError("too few points")
 
-    Vbar2 = Vba**2
-    Yobs  = Vob**2
+    # Try to get components if present
+Vd = df.get("V_disk_kms", None)
+Vb = df.get("V_bulge_kms", None)
+Vg = df.get("V_gas_kms", None)
+Vd = Vd.values[m] if Vd is not None else None
+Vb = Vb.values[m] if Vb is not None else None
+Vg = Vg.values[m] if Vg is not None else None
+
+# If components aren't present, split Vbar heuristically (disc ~0.7, gas ~0.3)
+if Vd is None and Vg is None and Vb is None:
+    Vd = 0.7 * Vba
+    Vg = 0.3 * Vba
+    Vb = np.zeros_like(Vba)
+
+# struct scales
+scales = SCALES_CACHE.get(gal, dict(Rd=None,Rb=None,Rg=None))
+
+Vbar2 = Vba**2
+Yobs  = Vob**2
 
     if Verr is not None:
         # var(V^2) ~ (2 V sigma_V)^2
@@ -90,9 +108,13 @@ def fit_one(gal, df):
     ub = np.array([3.0, 200.0])
 
     def residual(p):
-        eps, lam = p
+    eps, lam = p
+    use_proxy = (scales.get("Rd") is None and scales.get("Rb") is None and scales.get("Rg") is None)
+    if use_proxy:
         V2 = routeA_velocity_sq(R, Vbar2, eps, lam)
-        return np.sqrt(w) * (V2 - Yobs)
+    else:
+        V2 = routea_rc_model_sq(R, Vd, Vb, Vg, scales=scales, lam_kpc=lam, eps=eps)
+    return np.sqrt(w) * (V2 - Yobs)
 
     res = optimize.least_squares(residual, x0=[eps0, lam0], bounds=(lb, ub),
                                  xtol=1e-12, ftol=1e-12, gtol=1e-12, max_nfev=8000)
@@ -108,6 +130,8 @@ def fit_one(gal, df):
     return dict(Galaxy=gal, lam_kpc=float(lam_fit), eps=float(eps_fit), chi2=chi2, nu=nu, status=edge)
 
 # --- Main sweep ---
+SCALES_CACHE = load_struct_scales()
+
 def main():
     os.makedirs(os.path.dirname(OUT_CSV), exist_ok=True)
     os.makedirs(os.path.dirname(HIST_KPC), exist_ok=True)
