@@ -38,11 +38,73 @@ def load_curve(gal):
             return pd.read_csv(p)
     return None
 
-def yukawa_velocity_sq(R_kpc, A, lam_kpc):
+
+def routeA_velocity_sq(R_kpc, Vbar_sq, eps, lam_kpc):
+    """
+    Route-A rotational proxy: V_mod^2 = V_bar^2 * [1 + eps * (1 - exp(-R/lam))]
+    Inputs:
+      R_kpc   : radii in kpc  (array)
+      Vbar_sq : baryonic velocity squared (km/s)^2 (array)
+      eps     : dimensionless strength >= 0
+      lam_kpc : range in kpc
+    """
+    import numpy as np
     R = np.asarray(R_kpc, dtype=float)
-    return A * np.exp(-R/lam_kpc) / np.clip(R, 1e-6, None)
+    return Vbar_sq * (1.0 + eps * (1.0 - np.exp(-R / lam_kpc)))
 
 def fit_one(gal, df):
+    import numpy as np
+    cols = {c.lower().strip(): c for c in df.columns}
+    need = ["r_kpc","v_obs_kms","v_baryon_kms"]
+    for n in need:
+        if n not in cols:
+            raise ValueError("missing column: " + n)
+
+    R   = df[cols["r_kpc"]].astype(float).values
+    Vob = df[cols["v_obs_kms"]].astype(float).values
+    Vba = df[cols["v_baryon_kms"]].astype(float).values
+    Verr = df[cols["v_err_kms"]].astype(float).values if "v_err_kms" in cols else None
+
+    m = np.isfinite(R) & np.isfinite(Vob) & np.isfinite(Vba) & (R>0)
+    R, Vob, Vba = R[m], Vob[m], Vba[m]
+    if Verr is not None: Verr = Verr[m]
+    if len(R) < 6:
+        raise ValueError("too few points")
+
+    Vbar2 = Vba**2
+    Yobs  = Vob**2
+
+    if Verr is not None:
+        # var(V^2) ~ (2 V σ_V)^2  (propagate obs errors)
+        sigma2 = (2.0 * Vob * Verr)**2
+        w = 1.0 / np.clip(sigma2, 1e-12, None)
+    else:
+        w = np.ones_like(Yobs)
+
+    # Initial guesses: small eps, mid-range lambda
+    eps0, lam0 = 0.2, 5.0  # lam in kpc
+    # Bounds: eps ∈ [0, 3], lam ∈ [0.3, 200]  (broad; edge will be flagged)
+    lb = np.array([0.0, 0.3])
+    ub = np.array([3.0, 200.0])
+
+    def residual(p):
+        eps, lam = p
+        V2 = routeA_velocity_sq(R, Vbar2, eps, lam)
+        return np.sqrt(w) * (V2 - Yobs)
+
+    from scipy import optimize
+    res = optimize.least_squares(residual, x0=[eps0, lam0], bounds=(lb, ub),
+                                 xtol=1e-12, ftol=1e-12, gtol=1e-12, max_nfev=8000)
+    eps_fit, lam_fit = res.x
+    chi2 = float(np.sum((residual(res.x))**2))
+    nu   = int(max(len(R)-len(res.x), 1))
+
+    edge = "OK"
+    if abs(lam_fit - ub[1]) < 0.02*(ub[1]-lb[1]): edge = "EDGE_UP"
+    if abs(lam_fit - lb[1]) < 0.02*(ub[1]-lb[1]): edge = "EDGE_LOW"
+
+    return dict(Galaxy=gal, lam_kpc=float(lam_fit), eps=float(eps_fit), chi2=chi2, nu=nu, status=edge)
+(gal, df):
     cols = {c.lower().strip(): c for c in df.columns}
     need = ["r_kpc","v_obs_kms","v_baryon_kms"]
     if any(n not in cols for n in need):
