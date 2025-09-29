@@ -1,3 +1,12 @@
+
+def lam_override_with_mcmc(bin_tag, mode, lam_str):
+    import os, json
+    if bin_tag=="A" and mode=="freeA" and os.path.isfile("results/tables/binA_mcmc_freeA.json"):
+        q=json.load(open("results/tables/binA_mcmc_freeA.json","r"))["lam"]; err=0.5*(q["p84"]-q["p16"]); return f'{q["p50"]:.3g} $\\pm$ {err:.3g}'
+    if bin_tag=="B" and mode=="freeA" and os.path.isfile("results/tables/binB_mcmc_freeA.json"):
+        q=json.load(open("results/tables/binB_mcmc_freeA.json","r"))["lam"]; err=0.5*(q["p84"]-q["p16"]); return f'{q["p50"]:.3g} $\\pm$ {err:.3g}'
+    return lam_str
+
 import json, glob, os
 
 def edge_fmt(val, lb=0.05, ub=5.0):
