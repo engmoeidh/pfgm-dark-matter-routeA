@@ -96,11 +96,11 @@ def fit_one(gal, df, scales_cache):
     Vbar2 = Vba**2
     Yobs  = Vob**2
 
-    if Verr is not None:
-        sigma2 = (2.0 * Vob * np.clip(Verr, 1e-6, None))**2
-        w = 1.0 / np.clip(sigma2, 1e-12, None)
-    else:
-        w = np.ones_like(Yobs)
+    # --- velocity-space weighting ---
+    if Verr is None:
+        Verr = np.full_like(Vob, 10.0)  # km/s floor if missing
+    sigmaV2 = np.clip(Verr, 5.0, None)**2
+    wV = 1.0 / sigmaV2
 
     # Initial guesses and bounds
     eps0, lam0 = 0.2, 5.0
@@ -114,12 +114,14 @@ def fit_one(gal, df, scales_cache):
             V2 = routeA_velocity_sq(R, Vbar2, eps, lam)
         else:
             V2 = routea_rc_model_sq(R, Vd, Vb, Vg, scales=scales, lam_kpc=lam, eps=eps)
-        return np.sqrt(w) * (V2 - Yobs)
+        Vmod = np.sqrt(np.clip(V2, 0.0, None))
+        return np.sqrt(wV) * (Vmod - Vob)
 
     res = optimize.least_squares(residual, x0=[eps0, lam0], bounds=(lb, ub),
                                  xtol=1e-12, ftol=1e-12, gtol=1e-12, max_nfev=8000)
     eps_fit, lam_fit = res.x
-    chi2 = float(np.sum((residual(res.x))**2))
+    r = residual(res.x)
+    chi2 = float(np.sum(r*r))
     nu   = int(max(len(R)-len(res.x), 1))
 
     edge = "OK"
