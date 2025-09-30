@@ -15,7 +15,9 @@ def main():
     C = pd.read_csv(args.cov, header=None).to_numpy(float)
     Ci = np.linalg.inv(C)
     r = (DSmod - DS)[:,None]
-    chi2 = float(r.T @ Ci @ r)
+    import numpy as np
+    r = np.asarray(r, dtype=float).reshape(-1, 1)
+    chi2 = float((r.T @ Ci @ r).item())
     nu = len(R) - 1
     print(f"chi2/nu = {chi2/nu:.3f}  (nu={nu})")
 
