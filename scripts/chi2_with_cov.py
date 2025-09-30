@@ -1,4 +1,5 @@
 import numpy as np, pandas as pd, argparse
+import numpy as np
 
 def main():
     ap=argparse.ArgumentParser()
@@ -15,7 +16,6 @@ def main():
     C = pd.read_csv(args.cov, header=None).to_numpy(float)
     Ci = np.linalg.inv(C)
     r = (DSmod - DS)[:,None]
-    import numpy as np
     r = np.asarray(r, dtype=float).reshape(-1, 1)
     chi2 = float((r.T @ Ci @ r).item())
     nu = len(R) - 1
