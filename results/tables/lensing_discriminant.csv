@@ -1,5 +1,9 @@
-survey,bin,lam_best,chi2nu_best,dAIC_vs_GR,dBIC_vs_GR,best_source
-KiDS,A,1.267,1.0,,,results/tables\binA_fit_FREEA_J2_DIAGCHECK.json
-KiDS,B,0.518,1.0,-28.675,-27.96694979889779,results/tables\binB_fit_freeA.json
-SDSS,CMASS,4.999999999998324,1.1748651011971516,1.4602955765690666,2.168345777671277,results/tables\bin_CMASS_fit_freeA.json
-SDSS,LOWZ,4.999999999999999,5.864093827526568,-46.3060685289246,-45.59801832782239,results/tables\bin_LOWZ_fit_freeA.json
+survey,bin,lam_best,chi2nu_best,dAIC_vs_GR,dBIC_vs_GR,best_source,stat,lambda_mpc,b0,b2,chi2,nu,chi2_nu,source
+KiDS,A,1.267,1.0,,,results/tables\binA_fit_FREEA_J2_DIAGCHECK.json,,,,,,,,
+KiDS,B,0.518,1.0,-28.675,-27.96694979889779,results/tables\binB_fit_freeA.json,,,,,,,,
+SDSS,CMASS,4.999999999998324,1.1748651011971516,1.4602955765690666,2.168345777671277,results/tables\bin_CMASS_fit_freeA.json,,,,,,,,
+SDSS,LOWZ,4.999999999999999,5.864093827526568,-46.3060685289246,-45.59801832782239,results/tables\bin_LOWZ_fit_freeA.json,,,,,,,,
+KiDS,B,,,,,,PneE center-proxy (shape-only),0.518,-20.84,10.97,418.569107,71.0,5.895339535211267,Cat_to_Obs BlindC; ANG→ℓ centers; α profiled
+KiDS,A,,,,,,PneE center-proxy (shape-only),0.62,1.6,10.0,418.563005,71.0,5.895253591549295,Cat_to_Obs BlindC; ANG→ℓ centers; α profiled
+KiDS,B,,,,,,PneE full-kernel (ANG-center bands),0.518,-20.84,10.97,418.598761,71.0,5.895757197183099,Cat_to_Obs BlindC; NZ_SOURCE+LOWZ/CMASS; bands from ANG centers
+KiDS,A,,,,,,PneE full-kernel (ANG-center bands),0.62,1.6,10.0,418.59876,71.0,5.895757183098592,Cat_to_Obs BlindC; NZ_SOURCE+LOWZ/CMASS; bands from ANG centers
