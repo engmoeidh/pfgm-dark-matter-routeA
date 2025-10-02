@@ -27,3 +27,13 @@ results/posteriors/*.npy
 
 # external checkouts (not vendoring by default)
 external/
+# stray artifacts
+0]
+scripts/*.bak
+
+# big externals
+data/raw/kids/official/
+data/processed/kids/
+
+# placeholders
+data/processed/routeA/routeA_ZERO_binB_on_KiDS.csv
