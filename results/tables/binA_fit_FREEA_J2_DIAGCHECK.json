@@ -1,0 +1,11 @@
+{
+  "mode": "FREEA_J2_DIAG_CHECK",
+  "lambda_mpc": 1.267,
+  "b0": 1.567,
+  "b2": 9.883,
+  "A1h": null,
+  "chi2_red": 7.730724325103622,
+  "AIC": 93.03796757613983,
+  "BIC": 95.87016838054868,
+  "note": "diagnostic JSON written from J2/Hankel normalization check (baseline_comoving); replace with full fit later."
+}

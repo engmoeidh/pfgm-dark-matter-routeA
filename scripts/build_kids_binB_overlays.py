@@ -1,3 +1,8 @@
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('--fitjson', required=True)
+parser.add_argument('--label', default='')
+args = parser.parse_args()
 import numpy as np, pandas as pd, os, json
 from pathlib import Path
 from scipy.optimize import least_squares

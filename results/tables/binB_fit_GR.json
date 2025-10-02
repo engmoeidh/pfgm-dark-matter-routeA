@@ -1,0 +1,11 @@
+{
+  "mode": "GR",
+  "bin": "B",
+  "lambda_mpc": 0.0,
+  "A1h": NaN,
+  "b0": NaN,
+  "b2": NaN,
+  "chi2_red": 3.34,
+  "AIC": 46.08,
+  "BIC": 48.20415060330663
+}
