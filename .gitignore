@@ -6,3 +6,24 @@ __pycache__/
 data/tmp/
 results/posteriors/*.h5
 results/tables/build_info.json
+# temp & cache
+*_TMP*.csv
+*_SYNC.csv
+_tmp*.txt
+STATUS_snapshot.txt
+nul
+patch_fit_one.py
+
+# local bundles
+*.zip
+
+# local diagnostics & large externals (adjust if you intend to track)
+figures/diagnostics/
+data/raw/kids/KiDS_bin*_UNITFIXED.csv
+data/raw/kids/KiDS_binB_CONVERTED_kpc2.csv
+data/raw/slacs/
+data/raw/sparc/curves/
+results/posteriors/*.npy
+
+# external checkouts (not vendoring by default)
+external/
